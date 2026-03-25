@@ -11,5 +11,8 @@ ml GCC/14.2.0 R/4.5.1
 
 cd $SLURM_SUBMIT_DIR
 
-# Run with renv fully activated
-Rscript -e 'setwd(Sys.getenv("SLURM_SUBMIT_DIR")); source("renv/activate.R"); renv::load(); source("scripts/DataGen.R")'
+Rscript -e '
+source("renv/activate.R");
+renv::restore(prompt = FALSE);
+source("scripts/DataGen.R")
+'
