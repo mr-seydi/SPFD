@@ -1,7 +1,13 @@
 rm(list = ls())
+print(getwd())
+print(.libPaths())
+
 if (file.exists("renv/activate.R")) {
   source("renv/activate.R")
 }
+
+print(.libPaths())
+
 source("R/utilities.R")
 source("R/ThoraxDataParameters.R")
 
