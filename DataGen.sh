@@ -8,7 +8,7 @@
 #SBATCH -e error_%j.log
 
 ml purge >/dev/null 2>&1
-ml GCC/13.2.0 R/4.4.1
+ml GCC/14.2.0 R/4.5.1
 
 
 Rscript scripts/DataGen.R
