@@ -11,8 +11,5 @@ ml GCC/14.2.0 R/4.5.1
 
 cd $SLURM_SUBMIT_DIR
 
-# Force renv to use project library
-export RENV_PROJECT="$SLURM_SUBMIT_DIR"
-export RENV_PATHS_LIBRARY="$SLURM_SUBMIT_DIR/renv/library"
-
-Rscript scripts/DataGen.R
+# Run with renv fully activated
+Rscript -e 'setwd(Sys.getenv("SLURM_SUBMIT_DIR")); source("renv/activate.R"); renv::load(); source("scripts/DataGen.R")'
