@@ -12,3 +12,4 @@ ml GCC/14.2.0 R/4.5.1
 
 
 Rscript scripts/DataGen.R
+Rscript -e 'source("renv/activate.R"); source("scripts/DataGen.R")'

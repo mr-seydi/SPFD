@@ -1,4 +1,7 @@
 rm(list = ls())
+if (file.exists("renv/activate.R")) {
+  source("renv/activate.R")
+}
 source("R/utilities.R")
 source("R/ThoraxDataParameters.R")
 
