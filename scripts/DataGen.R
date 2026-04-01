@@ -3,6 +3,9 @@ rm(list = ls())
 source("R/utilities.R")
 source("R/ThoraxDataParameters.R")
 
+if (!dir.exists("data/GeneratedData")) {
+  dir.create("data/GeneratedData", recursive = TRUE)
+}
 
 results <- compute_metrics(
   "data/Thorax_X_101.xlsx",
