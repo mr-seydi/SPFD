@@ -1,12 +1,4 @@
 rm(list = ls())
-print(getwd())
-print(.libPaths())
-
-if (file.exists("renv/activate.R")) {
-  source("renv/activate.R")
-}
-
-print(.libPaths())
 
 source("R/utilities.R")
 source("R/ThoraxDataParameters.R")
@@ -51,9 +43,9 @@ for (n in n_samples) {
   
   for (mc in 1:MC_size) {
     
-    # if (mc %% 500 == 0){
-    #   print(paste("Generating data for n =", n, "MC iteration:", mc))
-    # }
+    if (mc %% 500 == 0){
+      print(paste("Generating data for n =", n, "MC iteration:", mc))
+    }
     
     # Generate noise per MC iteration
     noise_X_male <- Noise_generator(n, con_size, 0, sd_X, fwhm_X)$noise

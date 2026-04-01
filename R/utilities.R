@@ -16,7 +16,7 @@ completed_data <- function(x, y, defined_domain=c(0,100)) {
 }
 
 
-###################Functions###########################
+###################Utilities Functions###########################
 
 sigma_to_fwhm <- function(sigma){
   return(sigma*(2 * sqrt(2 * log(2))))
@@ -276,302 +276,6 @@ square_pulse <- function(start_end_pulse, start_height,
   return(pulse)
 }
 
-
-
-##############Methods functions###########
-
-Initialize_method_list <- function(Methods, Conti_size=101, Iter_number=100){
-  method_list <- list()
-  for (M in Methods) {
-    method_list[[M]] <- matrix(,nrow = Conti_size, ncol = 0)
-  }
-  return(method_list)
-}
-
-Power_data_generator <- function(Sample_size, Data,
-                                 Signal, Conti_size = 101,
-                                 Noise_mu, Noise_sig, Noise_fwhm,
-                                 n_evaluation_points = NULL){
-  
-  noise1 <- noise_guassian_curve(number_of_curves = Sample_size,
-                                 continuum_size = Conti_size)
-  noise2 <- noise_guassian_curve(number_of_curves = Sample_size,
-                                 continuum_size = Conti_size)
-  noise1 <- smoothed_gussian_curves(noise1, Noise_mu, Noise_sig, Noise_fwhm)
-  noise2 <- smoothed_gussian_curves(noise2, Noise_mu, Noise_sig, Noise_fwhm)
-  
-  if (is.null(Data)){
-    data1 <- data_generator(signal = Signal, noise = noise1)
-    data2 <- data_generator(noise = noise2)    
-  } else if (is.null(Signal)) {
-    data1 <- data_generator(data = Data[,1], noise = noise1)
-    data2 <- data_generator(data = Data[,2], noise = noise2)
-  } else {
-    data1 <- data_generator(data = Data, signal = Signal, noise = noise1)
-    data2 <- data_generator(data = Data, noise = noise2)      
-  }
-  
-  if (!is.null(n_evaluation_points)) {
-    dense_data <- dense_data(data1=data1, data2=data2, eval_numbers = n_evaluation_points)
-    data1 <- t(dense_data$dense_data1)
-    data2 <- t(dense_data$dense_data2)
-  }
-  
-  return(list(data1 = data1, data2 = data2))
-}
-
-Pvalue_calculator <- function(method_list, data1, data2){
-  
-  Methods <- names(method_list)
-  
-  for (M in Methods) {
-    Pvalues <- Pval_method(sampel1 = t(data1), sample2 = t(data2),
-                           method = M)
-    #p_values dimension is continuum_size*Iter_number
-    method_list[[M]] <- cbind(method_list[[M]], Pvalues)
-  }
-  return(method_list) #Filled in method list
-}
-
-
-Power_calculator <- function(Pvalues, Iter_number=NULL, Alpha){
-  
-  Methods <- names(Pvalues)
-  
-  for (M in Methods) {
-    
-    if (is.null(Iter_number)) {
-      Iter_number <- ncol(Pvalues[[M]])
-    }
-    
-    # Check if the method is either "ERL" or "IATSE"
-    #Because those methods do not return p-values
-    if (M %in% c("ERL", "IATSE")) {
-      pvalue_less_alpha <- Pvalues[[M]]
-      # For "ERL" and "IATSE", only run this code
-      power <- sum(colSums(pvalue_less_alpha) > 0) / Iter_number
-    } else {
-      pvalue_less_alpha <- Pvalues[[M]] < Alpha
-      power <- sum(colSums(pvalue_less_alpha) > 0) / Iter_number
-    }
-    
-    Pvalues[[M]] <- power
-  }
-  
-  return(Pvalues)
-  
-}
-
-check_false_positives <- function(sig_matrix, D1) {
-  apply(sig_matrix, 2, function(col) {
-    sum(col[D1]) / length(D1)
-  })
-  
-}
-
-Sensetivity_calculator <- function(Pvalues, D1, Alpha){
-  
-  Methods <- names(Pvalues)
-  
-  for (M in Methods) {
-    
-    
-    # Check if the method is either "ERL" or "IATSE"
-    #Because those methods do not return p-values
-    if (M %in% c("ERL", "IATSE")) {
-      pvalue_less_alpha <- Pvalues[[M]]
-      
-      #check false positives
-      sensetivity <- mean(check_false_positives(pvalue_less_alpha, D1))
-      
-    } else {
-      pvalue_less_alpha <- Pvalues[[M]] < Alpha
-      sensetivity <-  mean(check_false_positives(pvalue_less_alpha, D1))
-    }
-    
-    Pvalues[[M]] <- sensetivity
-  }
-  
-  return(Pvalues)
-  
-}
-
-
-Pval_method <- function(sampel1,sample2,method) {
-  if (method=="IWT") {
-    pval <- IWT(sampel1,sample2)
-  } else if (method=="TWT"){
-    pval <- TWT(sampel1,sample2)
-  } else if (method=="Parametric_SPM"){
-    pval <- p_spm(sampel1,sample2)
-  } else if (method=="Nonparametric_SPM"){
-    pval <- p_snpm(sampel1,sample2)
-  } else if (method=="ERL"){
-    pval <- ERL(sampel1,sample2)
-  } else if (method=="IATSE"){
-    pval <- IATSE(sampel1,sample2)
-  } else {
-    stop("Choose a method between options")
-  }
-  return(pval)
-}
-
-
-p_spm <- function(data1, data2){
-  # spm  <- spm1d$stats$ttest2(data1, data2, equal_var=FALSE)
-  # p_val <- spm1d$rft1d$f$sf((spm$z)^2, spm$df, spm$Q, spm$fwhm, withBonf=TRUE)
-  p_val <- SPM(data1, data2, variance.equal = FALSE, Clevel = 0.95)
-  return(p_val)
-}
-
-p_snpm <- function(data1, data2, B = 1000){
-  
-  n1 = dim(data1)[1]
-  n2 = dim(data2)[1]
-  
-  
-  group12 = factor(c(rep(1,n1),rep(2,n2)))
-  data_group12 <- rbind(data1,data2)
-  
-  # Create a data frame that includes both data_group12 and group12
-  combined_data <- data.frame(data_group12, group12)
-  
-  # Pass the formula with the combined data to Fmax
-  Fmax_pval <- Fmax(data_group12 ~ group12, DATA = combined_data)
-  return(Fmax_pval$adjusted_pval_F)
-  
-}
-
-
-
-
-
-
-
-############## Parallel processing functions ####################
-# Custom combine function to accumulate matrices across iterations
-# parallel_combine_function <- function(x, y) {
-#   for (M in names(x)) {
-#     # Combine matrices from the same method in both x and y
-#     x[[M]] <- cbind(x[[M]], y[[M]])
-#   }
-#   return(x)
-# }
-
-# 2) A generic combine that dispatches on matrix vs numeric
-# parallel_combine_function <- function(x, y) {
-#   for (nm in names(x)) {
-#     xi <- x[[nm]]
-#     yi <- y[[nm]]
-#     
-#     #–– both sub‐lists?  Recurse:
-#     if (is.list(xi) && is.list(yi)) {
-#       x[[nm]] <- parallel_combine_function(xi, yi)
-#       
-#       #–– either matrices or data.frames?  cbind them:
-#     } else if ((is.matrix(xi)    || is.data.frame(xi)) &&
-#                (is.matrix(yi)    || is.data.frame(yi))) {
-#       # normalize to data.frame so columns line up
-#       x[[nm]] <- cbind(as.data.frame(xi), as.data.frame(yi))
-#       
-#       #–– both numeric vectors?  concatenate:
-#     } else if (is.numeric(xi) && is.numeric(yi)) {
-#       x[[nm]] <- c(xi, yi)
-#       
-#     } else {
-#       stop(sprintf(
-#         "Cannot combine element '%s' classes %s vs %s",
-#         nm, class(xi)[1], class(yi)[1]
-#       ))
-#     }
-#   }
-#   x
-# }
-
-parallel_combine_function <- function(x, y) {
-  # if one side is NULL (e.g. first pass), just take the other
-  if (is.null(x)) return(y)
-  if (is.null(y)) return(x)
-  
-  # 1) stitch together the two method_list’s
-  #    each is itself a list of two matrices of the same shape
-  ml_combined <- Map(function(mx, my) {
-    # both mx & my are matrices, so cbind them
-    cbind(mx, my)
-  }, x$method_list, y$method_list)
-  
-  # 2) concatenate the FWHM estimates
-  noise_fwhm_combined <- c(x$est_noise_fwhm, y$est_noise_fwhm)
-  data_fwhm_combined  <- c(x$est_data_fwhm,  y$est_data_fwhm)
-  
-  list(
-    method_list    = ml_combined,
-    est_noise_fwhm = noise_fwhm_combined,
-    est_data_fwhm  = data_fwhm_combined
-  )
-}
-
-
-
-
-
-## Replace Excel output with fast binary .fst files
-# Install fst if needed:
-# install.packages("fst")
-
-# Handle the loop result list and save each element as a separate .fst file
-write_results_to_fst <- function(loop, base_path = "results") {
-  
-  # Iterate over each element in the list
-  for (method_name in names(loop)) {
-    # Extract the data frame/matrix
-    df <- as.data.frame(loop[[method_name]])
-    
-    out_file <- file.path(paste0(base_path,"_",method_name, ".fst"))
-    
-    # Write using high-speed fst format
-    write_fst(df, out_file, compress = 50)  # compress level 0-100; 50 is a good balance
-  }
-  
-}
-
-write_estimated_noisefwhm_to_fst <- function(fwhm_est, base_path = "noisefwhm") {
-  # Convert to data frame
-  fwhm_df <- as.data.frame(fwhm_est)
-  
-  # Write using high-speed fst format
-  write_fst(fwhm_df, file.path(paste0(base_path,"_noisefwhm_est.fst")), compress = 50)
-}
-
-write_estimated_datafwhm_to_fst <- function(fwhm_est, base_path = "datafwhm") {
-  # Convert to data frame
-  fwhm_df <- as.data.frame(fwhm_est)
-  
-  # Write using high-speed fst format
-  write_fst(fwhm_df, file.path(paste0(base_path,"_datafwhm_est.fst")), compress = 50)
-}
-
-
-
-############simulation function####################
-centered_ranges <- function(percentages, domain = c(0, 100)) {
-  midpoint <- mean(domain)
-  range_widths <- (percentages / 100) * diff(domain)
-  
-  starts <- midpoint - range_widths / 2
-  ends <- midpoint + range_widths / 2
-  
-  result <- data.frame(
-    Percentage = percentages,
-    Start = starts,
-    End = ends
-  )
-  
-  return(result)
-}
-
-######dense data#####
-
 dense_data <- function(data1, data2, eval_numbers){
   fdObject_data1 = fda::Data2fd(argvals = seq(0,dim(data1)[1]-1,by=1), y = data1) #data must be a matrix with each column as a curve
   fdObject_data2 = fda::Data2fd(argvals = seq(0,dim(data2)[1]-1,by=1), y = data2) #data must be a matrix with each column as a curve
@@ -594,6 +298,184 @@ dense_data <- function(data1, data2, eval_numbers){
 col_diff <- function(data){
   return(data[,2]-data[,1])
 }
+
+##### Power Estimation Functions #####
+
+check_true_positives_rate <- function(sig_matrix, D1) {
+  apply(sig_matrix, 2, function(col) {
+    sum(col[D1]) / length(D1)
+  })
+  
+}
+
+omnibus_power <- function(test_outputs, alpha = 0.05){
+  # test_outputs: a matrix contains p-values/reject-notreject for each iteration (columns) and each point (rows).
+  # alpha: significance level for determining if a p-value indicates a significant result.
+  
+  if(is.logical(test_outputs)){
+    # If test_outputs is already a logical matrix (TRUE for significant, FALSE for not), we can directly calculate power.
+    significant_iterations <- apply(test_outputs, 2, any)
+  } else if(is.numeric(test_outputs)){
+    # If test_outputs is a numeric matrix of p-values, we need to determine significance based on alpha.
+    # Determine if any point is significant in each iteration
+    significant_iterations <- apply(test_outputs < alpha, 2, any)
+  } else {
+    stop("test_outputs must be either a logical matrix or a numeric matrix of p-values.")
+  }
+  # Calculate power as the proportion of iterations with at least one significant node
+  power_results <- mean(significant_iterations)
+  return(power_results)
+}
+
+sensitivity <- function(test_outputs, D1, alpha = 0.05){
+  # test_outputs: a matrix contains p-values/reject-notreject for each iteration (columns) and each point (rows).
+  # D1: a numeric vector indicating which points are truly different.
+  # alpha: significance level for determining if a p-value indicates a significant result.
+  
+  if(is.logical(test_outputs)){
+    # If test_outputs is already a logical matrix (TRUE for significant, FALSE for not), we can directly calculate sensitivity.
+    true_positives_ratio <- check_true_positives_rate(test_outputs, D1)
+  } else if(is.numeric(test_outputs)){
+    # If test_outputs is a numeric matrix of p-values, we need to determine significance based on alpha.
+    significant_iterations <- test_outputs < alpha
+    true_positives_ratio <- check_true_positives_rate(significant_iterations, D1)
+  } else {
+    stop("test_outputs must be either a logical matrix or a numeric matrix of p-values.")
+  }
+  sensitivity_results <- mean(true_positives_ratio)
+  return(sensitivity_results)
+  
+}
+
+
+
+ROI_power <- function(test_outputs, R, alpha = 0.05){
+  # test_outputs: a matrix contains p-values/reject-notreject for each iteration (columns) and each point (rows).
+  # R: a numeric vector indicating which region is of interest.
+  # alpha: significance level for determining if a p-value indicates a significant result.
+  
+  if(is.logical(test_outputs)){
+    # If test_outputs is already a logical matrix (TRUE for significant, FALSE for not), we can directly calculate sensitivity.
+    ROI <- apply(test_outputs[R,], 2, any)
+  } else if(is.numeric(test_outputs)){
+    # If test_outputs is a numeric matrix of p-values, we need to determine significance based on alpha.
+    significant_iterations <- test_outputs < alpha
+    ROI <- apply(significant_iterations[R,], 2, any)
+  } else {
+    stop("test_outputs must be either a logical matrix or a numeric matrix of p-values.")
+  }
+  ROI_power <- mean(ROI)
+  return(ROI_power)
+}
+
+
+
+SAE_function <- function(m1, m2, sd1, sd2, n1, n2){
+  pooled_sd <- sqrt(((n1-1)*sd1^2+(n2-1)*sd2^2)/(n1+n2-2))
+  effect <- abs(m1 - m2) / pooled_sd
+  return(effect)
+}
+
+compute_D1p <- function(m1, m2, sd1, sd2, n1, n2, taus) {
+  
+  if (any(taus <= 0)) {
+    stop("taus must be a positive number(s)")
+  }
+  
+  effect <- SAE_function(m1, m2, sd1, sd2, n1, n2)
+  
+  results <- list()
+  
+  for (i in seq_along(taus)) {
+    tau <- taus[i]
+    idx <- which(effect > tau)
+    
+    if (length(idx) > 0) {
+      runs <- split(idx, cumsum(c(1, diff(idx) != 1))) #if the effect exceeds the 
+      #threshold at indices 5, 6, 7, and 10, 11, it splits them into two distinct groups (runs).
+      
+      for (r in runs) {
+        #append
+        results[[length(results)+1]] <-
+          data.frame(
+            xmin = min(r),
+            xmax = max(r),
+            tau_value = tau
+          )
+      }
+    }
+  }
+  
+  return(bind_rows(results))
+}
+
+
+make_indices <- function(df) {
+  split(df, df$tau_value) |>
+    lapply(function(subdf) {
+      unlist(mapply(seq, subdf$xmin, subdf$xmax, SIMPLIFY = FALSE))
+    })
+}
+
+##### Inferential Methods #####
+
+TWT <- function(data1,data2){
+  TWT2=TWT2_new(data1,data2,mu=0,B=1000,paired=FALSE,dx=NULL)
+  pvalue_adj_TWT2=TWT2$adjusted_pval
+  return(pvalue_adj_TWT2)
+}
+
+
+IATSE <- function(data1,data2) {
+  
+  # t() because in Pvalue_calculator we t(data1) and t(data2)
+  #since the other methods works with t() of data
+  data1= t(data1)
+  data2= t(data2)
+  
+  d <- dim(data1)[1]
+  n_data <-dim(data1)[2]
+  c_s <- create_curve_set(list(r=0:(d-1),obs=cbind(data1,data2)))
+  
+  group <- factor(rep(c(1,2),each=n_data))
+  
+  test <- frank.fanova(
+    
+    nsim = 1000,
+    curve_set = c_s,
+    groups = group,
+    variances = "equal", #unequal variances can be used, but here we assume equal variances due to the fact that method is based on permutation
+    test.equality = "mean",
+    typeone = "fdr",
+    algorithm = "IATSE",
+    contrasts =TRUE,
+    alpha = 0.05
+  )
+  test_result <- (test$obs>test$hi) | (test$obs<test$lo) 
+  return(test_result)
+  
+}
+
+
+
+
+centered_ranges <- function(percentages, domain = c(0, 100)) {
+  midpoint <- mean(domain)
+  range_widths <- (percentages / 100) * diff(domain)
+  
+  starts <- midpoint - range_widths / 2
+  ends <- midpoint + range_widths / 2
+  
+  result <- data.frame(
+    Percentage = percentages,
+    Start = starts,
+    End = ends
+  )
+  
+  return(result)
+}
+
+
 
 
 ##########Estimate parameters of the noise and data##########

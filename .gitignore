@@ -47,3 +47,11 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# GeneratedData folder keeps but not inside
+data/GeneratedData/*
+!data/GeneratedData/.gitkeep
+
+# TestResults in outputs folder
+outputs/TestResults/*
+!outputs/TestResults/.gitkeep
